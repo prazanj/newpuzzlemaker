@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Puzzle</title>
+    <style>
+    
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 20px;
+            padding: 20px;
+        }
+        .puzzlePiece {
+            border: 1px solid #000;
+            cursor: pointer;
+            position: relative;
+            box-sizing: border-box;
+        }
+        #puzzleContainer {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            grid-template-rows: repeat(5, 1fr);
+            gap: 0;
+            margin: auto;
+            border: 2px solid #333;
+        }
+        .selected {
+            outline: 2px solid red;
+            z-index: 1;
+        }
+        .github-controls {
+            margin: 20px 0;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .github-controls input {
+            margin: 5px 0;
+            padding: 5px;
+            width: 300px;
+        }
+        #uploadStatus {
+            margin-top: 10px;
+            padding: 10px;
+            display: none;
+        }
+    
+    </style>
+</head>
+<body>
+    <div>
+        <input type="file" id="imageUpload">
+        <button id="shufflePuzzle">Shuffle</button>
+    </div>
+    <div id="puzzleContainer"></div>
+    <div class="github-controls">
+        <h3>GitHub Upload Settings</h3>
+        <input type="text" id="githubToken" placeholder="GitHub Personal Access Token" /><br>
+        <input type="text" id="repoName" placeholder="Repository Name" /><br>
+        <button id="uploadToGithub">Upload to GitHub</button>
+        <div id="uploadStatus"></div>
+    </div>
+    
+    <script>
+        const puzzleContainer = document.getElementById('puzzleContainer');
+        const shufflePuzzleButton = document.getElementById('shufflePuzzle');
+        const imageUpload = document.getElementById('imageUpload');
+        const gridSize = 5; // 5x5 grid
+        const maxDimension = 500; // Maximum dimension for either width or height
+
+        let tiles = [];
+        let selectedTile = null;
+
+        // Handle image upload
+        imageUpload.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            const reader = new FileReader();
+
+            reader.onload = (event) => {
+                const img = new Image();
+                img.src = event.target.result;
+                img.onload = () => {
+                    createPuzzle(img);
+                    shufflePuzzle();
+                };
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // Create puzzle from uploaded image
+        function createPuzzle(img) {
+            puzzleContainer.innerHTML = '';
+            tiles = [];
+
+            // Calculate container dimensions while maintaining aspect ratio
+            let containerWidth, containerHeight;
+            const aspectRatio = img.naturalWidth / img.naturalHeight;
+
+            if (aspectRatio > 1) {
+                // Landscape
+                containerWidth = maxDimension;
+                containerHeight = maxDimension / aspectRatio;
+            } else {
+                // Portrait
+                containerHeight = maxDimension;
+                containerWidth = maxDimension * aspectRatio;
+            }
+
+            // Set container dimensions
+            puzzleContainer.style.width = `${containerWidth}px`;
+            puzzleContainer.style.height = `${containerHeight}px`;
+
+            const tileWidth = containerWidth / gridSize;
+            const tileHeight = containerHeight / gridSize;
+
+            for (let y = 0; y < gridSize; y++) {
+                for (let x = 0; x < gridSize; x++) {
+                    const tile = document.createElement('div');
+                    tile.classList.add('puzzlePiece');
+                    tile.style.width = '100%';
+                    tile.style.height = '100%';
+                    tile.style.backgroundImage = `url(${img.src})`;
+                    tile.style.backgroundSize = `${containerWidth}px ${containerHeight}px`;
+                    tile.style.backgroundPosition = `-${x * tileWidth}px -${y * tileHeight}px`;
+                    tile.dataset.index = y * gridSize + x;
+
+                    tile.addEventListener('click', () => {
+                        if (selectedTile) {
+                            const tempBackground = selectedTile.style.backgroundPosition;
+                            selectedTile.style.backgroundPosition = tile.style.backgroundPosition;
+                            tile.style.backgroundPosition = tempBackground;
+
+                            const tempIndex = selectedTile.dataset.index;
+                            selectedTile.dataset.index = tile.dataset.index;
+                            tile.dataset.index = tempIndex;
+
+                            selectedTile.classList.remove('selected');
+                            selectedTile = null;
+                            checkPuzzleCompletion();
+                        } else {
+                            selectedTile = tile;
+                            tile.classList.add('selected');
+                        }
+                    });
+
+                    tiles.push(tile);
+                    puzzleContainer.appendChild(tile);
+                }
+            }
+        }
+
+        // Shuffle the puzzle pieces
+        function shufflePuzzle() {
+            const positions = tiles.map(tile => tile.style.backgroundPosition);
+            const indices = tiles.map(tile => tile.dataset.index);
+            
+            for (let i = positions.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [positions[i], positions[j]] = [positions[j], positions[i]];
+                [indices[i], indices[j]] = [indices[j], indices[i]];
+            }
+            
+            tiles.forEach((tile, index) => {
+                tile.style.backgroundPosition = positions[index];
+                tile.dataset.index = indices[index];
+            });
+        }
+
+        // Check if the puzzle is completed
+        function checkPuzzleCompletion() {
+            let isComplete = true;
+            tiles.forEach((tile, index) => {
+                if (parseInt(tile.dataset.index, 10) !== index) {
+                    isComplete = false;
+                }
+            });
+            if (isComplete) {
+                alert('Puzzle Solved!');
+            }
+        }
+
+        shufflePuzzleButton.addEventListener('click', shufflePuzzle);
+
+        async function uploadToGithub() {
+    const token = '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'; // Your GitHub Token
+    const repoName = 'newpuzzlemaker'; // Repository name is set to newpuzzlemaker
+    const statusDiv = document.getElementById('uploadStatus');
+    
+    if (!token || !repoName) {
+        alert('Please provide both GitHub token and repository name');
+        return;
+    }
+
+    statusDiv.style.display = 'block';
+    statusDiv.textContent = 'Starting upload...';
+
+    try {
+        // Get current HTML content
+        const htmlContent = document.documentElement.outerHTML;
+        
+        // Check if repo exists
+        const repoCheckResponse = await fetch(`https://api.github.com/repos/prazanj/${repoName}`, {
+            headers: {
+                'Authorization': `token ${token}`,
+                'Accept': 'application/vnd.github.v3+json'
+            }
+        });
+
+        if (repoCheckResponse.status === 404) {
+            // Create repository if it doesn't exist
+            await fetch('https://api.github.com/user/repos', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `token ${token}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                },
+                body: JSON.stringify({
+                    name: repoName,
+                    auto_init: true
+                })
+            });
+            statusDiv.textContent = 'Created new repository...';
+        }
+
+        // Create or update index.html
+        const content = btoa(htmlContent); // Convert to base64
+        
+        const putResponse = await fetch(`https://api.github.com/repos/prazanj/${repoName}/contents/index.html`, {
+            method: 'PUT',
+            headers: {
+                'Authorization': `token ${token}`,
+                'Accept': 'application/vnd.github.v3+json'
+            },
+            body: JSON.stringify({
+                message: 'Update puzzle',
+                content: content,
+                sha: await getFileSha(token, repoName)
+            })
+        });
+
+        if (putResponse.ok) {
+            // Enable GitHub Pages
+            await fetch(`https://api.github.com/repos/prazanj/${repoName}/pages`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `token ${token}`,
+                    'Accept': 'application/vnd.github.v3+json'
+                },
+                body: JSON.stringify({
+                    source: {
+                        branch: 'main'
+                    }
+                })
+            });
+
+            statusDiv.textContent = `Upload complete! Your puzzle will be available at: https://prazanj.github.io/${repoName}/`;
+            statusDiv.style.backgroundColor = '#dff0d8';
+        } else {
+            throw new Error('Failed to upload file');
+        }
+    } catch (error) {
+        statusDiv.textContent = 'Error: ' + error.message;
+        statusDiv.style.backgroundColor = '#f2dede';
+    }
+}
+
+async function getFileSha(token, repoName) {
+    try {
+        const response = await fetch(`https://api.github.com/repos/prazanj/${repoName}/contents/index.html`, {
+            headers: {
+                'Authorization': `token ${token}`,
+                'Accept': 'application/vnd.github.v3+json'
+            }
+        });
+        if (response.ok) {
+            const data = await response.json();
+            return data.sha;
+        }
+        return null;
+    } catch (error) {
+        return null;
+    }
+}
+
+document.getElementById('uploadToGithub').addEventListener('click', uploadToGithub);
+
+    </script>
+</body>
+</html>
